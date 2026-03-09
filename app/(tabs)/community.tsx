@@ -1,17 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 
-export default function PremiumScreen() {
+export default function CommunityScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>👑 Premium</Text>
-      <Text style={styles.sub}>Çok yakında!</Text>
-    </View>
+    <View style={styles.container}><Text style={styles.text}>🌐 Topluluk</Text></View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' },
   text: { fontSize: FONT_SIZES.xxl, fontWeight: FONT_WEIGHTS.bold, color: COLORS.navy },
-  sub: { fontSize: FONT_SIZES.md, color: COLORS.gray400, marginTop: 8 },
 });
