@@ -71,22 +71,22 @@ keyboardShouldPersistTaps="handled"
 <Text style={styles.title}>📝 Kayıt Ol</Text>
 
 <TextInput
-placeholder="Email"
-placeholderTextColor={COLORS.gray300}
-style={styles.input}
-value={email}
-onChangeText={setEmail}
-autoCapitalize="none"
+  style={styles.input}
+  placeholder="Email"
+  placeholderTextColor={COLORS.gray300}
+  value={email}
+  onChangeText={setEmail}
+  keyboardType="email-address"
+  autoCapitalize="none"
 />
 
 <TextInput
-placeholder="Şifre"
-placeholderTextColor={COLORS.gray300}
-style={styles.input}
-secureTextEntry
-value={password}
-onChangeText={setPassword}
-autoCapitalize="none"
+  style={styles.input}
+  placeholder="Şifre"
+  placeholderTextColor={COLORS.gray300}
+  value={password}
+  onChangeText={setPassword}
+  secureTextEntry
 />
 
 <Text style={styles.passwordHint}>
