@@ -10,9 +10,7 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { supabase } from "../../services/supabase"
-import { useAuthStore } from "../../store/authStore"
-
+import { router } from "expo-router"
 import {
     COLORS,
     FONT_SIZES,
@@ -20,6 +18,8 @@ import {
     RADIUS,
     SPACING
 } from "../../constants"
+import { supabase } from "../../services/supabase"
+import { useAuthStore } from "../../store/authStore"
 
 type Course = {
 id:string
@@ -61,7 +61,6 @@ setTotalQuestions(count)
 }
 
 }
-
 const filtered = courses.filter((c:any) =>
 c.name.toLowerCase().includes(search.toLowerCase())
 )
@@ -94,7 +93,10 @@ keyExtractor={(item)=>item.id}
 contentContainerStyle={styles.list}
 renderItem={({item})=>(
 
-<TouchableOpacity style={styles.courseCard}>
+<TouchableOpacity
+style={styles.courseCard}
+onPress={() => router.push(`/course/${item.id}` as any)}
+>
 
 <View
 style={[
@@ -106,20 +108,11 @@ styles.countBadge,
 </View>
 
 <View style={{flex:1}}>
-
-<Text style={styles.courseName}>
-{item.name}
-</Text>
-
-<Text style={styles.courseSub}>
-0 soru arşivde
-</Text>
-
+<Text style={styles.courseName}>{item.name}</Text>
+<Text style={styles.courseSub}>0 soru arşivde</Text>
 </View>
 
-<Text style={styles.arrow}>
-›
-</Text>
+<Text style={styles.arrow}>›</Text>
 
 </TouchableOpacity>
 

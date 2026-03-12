@@ -12,6 +12,7 @@ export default function ProfileScreen() {
         <Text style={styles.logoutText}>Çıkış Yap</Text>
       </TouchableOpacity>
     </View>
+    
   );
 }
 
