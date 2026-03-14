@@ -153,6 +153,7 @@ export default function CourseScreen() {
       <TouchableOpacity
         style={[styles.questionCard, { borderLeftColor: statusColor.main }]}
         activeOpacity={0.7}
+        onPress={() => router.push(`/question/${item.id}` as any)}
       >
         {/* Üst satır: durum + tarih + favori */}
         <View style={styles.questionHeader}>
