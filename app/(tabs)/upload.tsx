@@ -143,13 +143,18 @@ export default function UploadScreen() {
 
     try {
       // 1. Görseli Storage'a yükle
-      const fileName = `${profile.id}/${Date.now()}.jpg`
-      const response = await fetch(imageUri)
-      const blob = await response.blob()
+   const fileName = `${profile.id}/${Date.now()}.jpg`
+
+      const base64Response = await fetch(imageUri)
+      const arrayBuffer = await base64Response.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("question-images")
-        .upload(fileName, blob, { contentType: "image/jpeg" })
+        .upload(fileName, uint8Array, {
+          contentType: "image/jpeg",
+          upsert: false,
+        })
 
       if (uploadError) {
         Alert.alert("Hata", "Görsel yüklenemedi: " + uploadError.message)

@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from "react-native"
@@ -56,7 +57,10 @@ export default function CourseScreen() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [activeFilters, setActiveFilters] = useState<FilterId[]>(["all"])
   const [loading, setLoading] = useState(true)
-
+  const [searchMode, setSearchMode] = useState(false)
+  const [searchText, setSearchText] = useState("")
+  const [searchResults, setSearchResults] = useState<string[]>([])
+  
   useEffect(() => {
     if (courseId) {
       loadData()
@@ -105,7 +109,15 @@ export default function CourseScreen() {
     setActiveFilters(next.length === 0 ? ["all"] : next)
   }
 
+  // Filtreleme + arama uygula
   const filteredQuestions = questions.filter((q) => {
+    // Etiket araması aktifse
+    if (searchMode && searchText.length > 0) {
+      if (searchResults.length === 0) return false
+      if (!searchResults.includes(q.id)) return false
+    }
+
+    // Normal filtreler
     if (activeFilters.includes("all")) return true
     return activeFilters.some((f) => {
       if (f === "favorite") return q.is_favorite
@@ -117,6 +129,45 @@ export default function CourseScreen() {
     if (filterId === "all") return questions.length
     if (filterId === "favorite") return questions.filter((q) => q.is_favorite).length
     return questions.filter((q) => q.status === filterId).length
+  }
+  // Etiketle arama
+  const handleSearch = async (text: string) => {
+    setSearchText(text)
+    if (text.length < 1) {
+      setSearchResults([])
+      return
+    }
+
+    // Bu dersteki eşleşen etiketleri bul
+    const { data: tagData } = await supabase
+      .from("tags")
+      .select("id, name")
+      .eq("user_id", profile?.id)
+      .eq("course_id", courseId)
+      .ilike("name", `%${text}%`)
+
+    if (tagData && tagData.length > 0) {
+      const tagIds = tagData.map((t: any) => t.id)
+
+      // Bu etiketlere sahip soruları bul
+      const { data: questionTagData } = await supabase
+        .from("question_tags")
+        .select("question_id")
+        .in("tag_id", tagIds)
+
+      if (questionTagData) {
+        const questionIds = [...new Set(questionTagData.map((qt: any) => qt.question_id))]
+        setSearchResults(questionIds)
+      }
+    } else {
+      setSearchResults([])
+    }
+  }
+
+  const clearSearch = () => {
+    setSearchMode(false)
+    setSearchText("")
+    setSearchResults([])
   }
 
   const handleToggleFavorite = async (questionId: string, currentFav: boolean) => {
@@ -139,6 +190,7 @@ export default function CourseScreen() {
     const diffMin = Math.floor(diffMs / 60000)
     const diffHour = Math.floor(diffMs / 3600000)
     const diffDay = Math.floor(diffMs / 86400000)
+    
 
     if (diffMin < 60) return `${diffMin}dk önce`
     if (diffHour < 24) return `${diffHour}s önce`
@@ -203,15 +255,43 @@ export default function CourseScreen() {
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: COLORS.navy }}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {course?.name || "Yükleniyor..."}
-          </Text>
-        </View>
-        <Text style={styles.headerCount}>{questions.length} soru</Text>
+        {searchMode ? (
+          <View style={styles.searchHeader}>
+            <TouchableOpacity onPress={clearSearch} style={styles.backBtn}>
+              <Text style={styles.backArrow}>‹</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Etiket ara..."
+              placeholderTextColor={COLORS.gray300}
+              value={searchText}
+              onChangeText={handleSearch}
+              autoFocus
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity onPress={() => handleSearch("")}>
+                <Text style={{ color: COLORS.gray300, fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <>
+            <View style={styles.headerLeft}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                <Text style={styles.backArrow}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {course?.name || "Yükleniyor..."}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}>
+              <TouchableOpacity onPress={() => setSearchMode(true)} style={styles.searchBtn}>
+                <Text style={{ fontSize: 16 }}>🔍</Text>
+              </TouchableOpacity>
+              <Text style={styles.headerCount}>{questions.length} soru</Text>
+            </View>
+          </>
+        )}
       </View>
 
       {/* Filtre barı */}
@@ -243,6 +323,15 @@ export default function CourseScreen() {
           })}
         </ScrollView>
       </View>
+
+      {/* Arama sonucu bilgisi */}
+      {searchMode && searchText.length > 0 && (
+        <View style={styles.searchInfo}>
+          <Text style={styles.searchInfoText}>
+            🏷️ "{searchText}" etiketinde {filteredQuestions.length} soru bulundu
+          </Text>
+        </View>
+      )}
 
       {/* Soru listesi */}
       <FlatList
@@ -309,6 +398,37 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semibold,
     opacity: 0.8,
+  },
+  // Arama
+  searchHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: SPACING.sm,
+  },
+  searchInput: {
+    flex: 1,
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    paddingVertical: 4,
+  },
+  searchBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  searchInfo: {
+    backgroundColor: COLORS.accentLight,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  searchInfoText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.accent,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
 
   filterContainer: {
