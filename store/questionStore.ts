@@ -8,6 +8,8 @@ interface QuestionStoreState {
   setFilters: (filters: FilterId[]) => void;
   toggleFilter: (filterId: FilterId) => void;
   setSelectedCourseId: (id: string | null) => void;
+  refreshCounter: number;
+  triggerRefresh: () => void;
 }
 
 export const useQuestionStore = create<QuestionStoreState>((set) => ({
@@ -22,4 +24,6 @@ export const useQuestionStore = create<QuestionStoreState>((set) => ({
     return { activeFilters: next.length === 0 ? ['all'] : next };
   }),
   setSelectedCourseId: (id) => set({ selectedCourseId: id }),
+  refreshCounter: 0,
+  triggerRefresh: () => set((state) => ({ refreshCounter: state.refreshCounter + 1 })),
 }));

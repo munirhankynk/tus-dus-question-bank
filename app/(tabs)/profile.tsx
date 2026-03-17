@@ -18,6 +18,7 @@ import {
 } from "../../constants"
 import { supabase } from "../../services/supabase"
 import { useAuthStore } from "../../store/authStore"
+import { useQuestionStore } from "../../store/questionStore"
 
 interface WeeklyStats {
   totalUploaded: number
@@ -33,19 +34,19 @@ interface WeeklyStats {
 export default function ProfileScreen() {
   const { profile, signOut } = useAuthStore()
   const router = useRouter()
-
+  const { refreshCounter } = useQuestionStore()
   const [totalQuestions, setTotalQuestions] = useState(0)
   const [topCourseName, setTopCourseName] = useState("")
   const [reportExpanded, setReportExpanded] = useState(false)
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null)
   const [loadingStats, setLoadingStats] = useState(true)
 
-  useEffect(() => {
+ useEffect(() => {
     if (profile) {
       loadStats()
       loadWeeklyStats()
     }
-  }, [profile])
+  }, [profile, refreshCounter])
 
   const loadStats = async () => {
     if (!profile) return

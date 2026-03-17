@@ -2,7 +2,9 @@ import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   Alert,
+  Dimensions,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -52,6 +54,7 @@ export default function QuestionDetailScreen() {
   const [editing, setEditing] = useState(false)
   const [editNote, setEditNote] = useState("")
   const [loading, setLoading] = useState(true)
+  const [imageModalVisible, setImageModalVisible] = useState(false)
 
   useEffect(() => {
     if (questionId) loadData()
@@ -237,11 +240,16 @@ export default function QuestionDetailScreen() {
 
         {/* Görsel */}
         {question.image_url ? (
-          <Image
-            source={{ uri: question.image_url }}
-            style={styles.image}
-            resizeMode="contain"
-          />
+          <TouchableOpacity onPress={() => setImageModalVisible(true)}>
+            <Image
+              source={{ uri: question.image_url }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+            <View style={styles.zoomHint}>
+              <Text style={styles.zoomHintText}>🔍 Büyütmek için dokun</Text>
+            </View>
+          </TouchableOpacity>
         ) : (
           <View style={styles.imagePlaceholder}>
             <Text style={{ fontSize: 48, opacity: 0.3 }}>📄</Text>
@@ -312,6 +320,34 @@ export default function QuestionDetailScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      {/* Fotoğraf büyütme modal */}
+      <Modal
+        visible={imageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalClose}
+            onPress={() => setImageModalVisible(false)}
+          >
+            <Text style={styles.modalCloseText}>✕</Text>
+          </TouchableOpacity>
+          <ScrollView
+            maximumZoomScale={5}
+            minimumZoomScale={1}
+            contentContainerStyle={styles.modalImageContainer}
+            centerContent
+          >
+            <Image
+              source={{ uri: question.image_url }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -433,6 +469,52 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+  },
+  // Zoom hint
+  zoomHint: {
+    position: "absolute",
+    bottom: SPACING.sm + 4,
+    right: SPACING.sm + 4,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  zoomHintText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs + 1,
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+  },
+  modalClose: {
+    position: "absolute",
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCloseText: {
+    color: COLORS.white,
+    fontSize: 20,
+  },
+  modalImageContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalImage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height * 0.8,
   },
   courseName: {
     fontSize: FONT_SIZES.sm + 1,

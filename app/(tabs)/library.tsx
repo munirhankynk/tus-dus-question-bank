@@ -1,3 +1,4 @@
+import { router } from "expo-router"
 import { useEffect, useState } from "react"
 import {
     FlatList,
@@ -7,10 +8,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native"
-
 import { SafeAreaView } from "react-native-safe-area-context"
-
-import { router } from "expo-router"
 import {
     COLORS,
     FONT_SIZES,
@@ -20,6 +18,7 @@ import {
 } from "../../constants"
 import { supabase } from "../../services/supabase"
 import { useAuthStore } from "../../store/authStore"
+import { useQuestionStore } from "../../store/questionStore"
 
 type Course = {
 id:string
@@ -31,12 +30,12 @@ sort_order:number
 export default function LibraryScreen(){
 
 const { profile } = useAuthStore()
-
 const [courses,setCourses] = useState<Course[]>([])
 const [search,setSearch] = useState("")
 const [totalQuestions,setTotalQuestions] = useState(0)
+const { refreshCounter } = useQuestionStore()
 
-useEffect(()=>{loadCourses()},[])
+useEffect(() => { loadCourses() }, [refreshCounter])
 
 const loadCourses = async () => {
 
