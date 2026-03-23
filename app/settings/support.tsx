@@ -34,18 +34,6 @@ export default function SupportScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Sık Sorulan Sorular</Text>
-
-          {[
-            { q: "Sorularım güvende mi?", a: "Evet, tüm veriler şifreli olarak saklanır ve sadece sen görebilirsin." },
-            { q: "Fotoğraflarım nerede tutuluyor?", a: "Supabase Storage üzerinde güvenli sunucularda saklanır." },
-            { q: "Premium ne zaman gelecek?", a: "Yakında! Grup özellikleri ve detaylı analiz üzerinde çalışıyoruz." },
-          ].map((faq, i) => (
-            <View key={i} style={[styles.faqItem, i < 2 && styles.faqBorder]}>
-              <Text style={styles.faqQ}>{faq.q}</Text>
-              <Text style={styles.faqA}>{faq.a}</Text>
-            </View>
-          ))}
         </View>
       </View>
     </SafeAreaView>

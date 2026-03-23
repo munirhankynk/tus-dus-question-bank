@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
+  Alert,
   FlatList,
   Image,
   ScrollView,
@@ -21,6 +22,7 @@ import {
 } from "../../constants"
 import { supabase } from "../../services/supabase"
 import { useAuthStore } from "../../store/authStore"
+import { useQuestionStore } from "../../store/questionStore"
 
 type Question = {
   id: string
@@ -52,6 +54,7 @@ export default function CourseScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>()
   const router = useRouter()
   const { profile } = useAuthStore()
+  const { triggerRefresh } = useQuestionStore()
 
   const [course, setCourse] = useState<Course | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -60,6 +63,8 @@ export default function CourseScreen() {
   const [searchMode, setSearchMode] = useState(false)
   const [searchText, setSearchText] = useState("")
   const [searchResults, setSearchResults] = useState<string[]>([])
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   
   useEffect(() => {
     if (courseId) {
@@ -170,6 +175,43 @@ export default function CourseScreen() {
     setSearchResults([])
   }
 
+  // Toplu seçim
+  const toggleSelectQuestion = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
+
+  const selectAll = () => {
+    setSelectedIds(filteredQuestions.map((q) => q.id))
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return
+
+    Alert.alert(
+      "Toplu Sil",
+      `${selectedIds.length} soruyu silmek istediğine emin misin?`,
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Sil",
+          style: "destructive",
+          onPress: async () => {
+            for (const id of selectedIds) {
+              await supabase.from("question_tags").delete().eq("question_id", id)
+              await supabase.from("questions").delete().eq("id", id)
+            }
+            setSelectedIds([])
+            setSelectMode(false)
+            loadData()
+            triggerRefresh()
+          },
+        },
+      ]
+    )
+  }
+
   const handleToggleFavorite = async (questionId: string, currentFav: boolean) => {
     await supabase
       .from("questions")
@@ -200,15 +242,21 @@ export default function CourseScreen() {
 
   const renderQuestion = ({ item }: { item: Question }) => {
     const statusColor = STATUS_COLORS[item.status]
+    const isSelected = selectedIds.includes(item.id)
 
     return (
       <TouchableOpacity
         style={[styles.questionCard, { borderLeftColor: statusColor.main }]}
         activeOpacity={0.7}
-        onPress={() => router.push(`/question/${item.id}` as any)}
+        onPress={() => selectMode ? toggleSelectQuestion(item.id) : router.push(`/question/${item.id}` as any)}
       >
         {/* Üst satır: durum + tarih + favori */}
         <View style={styles.questionHeader}>
+        {selectMode && (
+            <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          )}
           <View style={styles.statusRow}>
             <Text style={{ fontSize: 12 }}>{statusColor.icon}</Text>
             <Text style={[styles.statusLabel, { color: statusColor.main }]}>
@@ -218,7 +266,7 @@ export default function CourseScreen() {
           <View style={styles.metaRow}>
             <Text style={styles.dateText}>{formatDate(item.uploaded_at)}</Text>
             <TouchableOpacity
-              onPress={() => handleToggleFavorite(item.id, item.is_favorite)}
+              onPress={() => selectMode ? toggleSelectQuestion(item.id) : router.push(`/question/${item.id}` as any)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={{ fontSize: 18, opacity: item.is_favorite ? 1 : 0.25 }}>
@@ -288,6 +336,14 @@ export default function CourseScreen() {
               <TouchableOpacity onPress={() => setSearchMode(true)} style={styles.searchBtn}>
                 <Text style={{ fontSize: 16 }}>🔍</Text>
               </TouchableOpacity>
+              {questions.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => { setSelectMode(!selectMode); setSelectedIds([]) }}
+                  style={styles.searchBtn}
+                >
+                  <Text style={{ fontSize: 14 }}>{selectMode ? "✕" : "☑️"}</Text>
+                </TouchableOpacity>
+              )}
               <Text style={styles.headerCount}>{questions.length} soru</Text>
             </View>
           </>
@@ -330,6 +386,24 @@ export default function CourseScreen() {
           <Text style={styles.searchInfoText}>
             🏷️ "{searchText}" etiketinde {filteredQuestions.length} soru bulundu
           </Text>
+        </View>
+      )}
+
+      {/* Toplu seçim barı */}
+      {selectMode && (
+        <View style={styles.selectBar}>
+          <TouchableOpacity onPress={selectAll}>
+            <Text style={styles.selectBarLink}>
+              {selectedIds.length === filteredQuestions.length ? "Seçimi Kaldır" : "Tümünü Seç"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.selectBarCount}>{selectedIds.length} seçili</Text>
+          <TouchableOpacity
+            onPress={handleBulkDelete}
+            style={[styles.selectBarDeleteBtn, selectedIds.length === 0 && { opacity: 0.4 }]}
+          >
+            <Text style={styles.selectBarDeleteText}>🗑️ Sil</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -430,6 +504,33 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
     fontWeight: FONT_WEIGHTS.semibold,
   },
+  // Toplu seçim
+  selectBar: {
+    backgroundColor: COLORS.white,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  selectBarLink: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.bold, color: COLORS.accent },
+  selectBarCount: { fontSize: FONT_SIZES.sm, color: COLORS.gray400 },
+  selectBarDeleteBtn: {
+    backgroundColor: COLORS.redLight,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+  },
+  selectBarDeleteText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.bold, color: COLORS.red },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+    borderColor: COLORS.gray200, marginRight: SPACING.sm,
+    justifyContent: "center", alignItems: "center",
+  },
+  checkboxActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
+  checkmark: { color: COLORS.white, fontSize: 14, fontWeight: FONT_WEIGHTS.bold },
 
   filterContainer: {
     backgroundColor: COLORS.white,

@@ -1,30 +1,31 @@
 import { router } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import {
-    COLORS,
-    FONT_SIZES,
-    FONT_WEIGHTS,
-    RADIUS,
-    SPACING
+  COLORS,
+  FONT_SIZES,
+  FONT_WEIGHTS,
+  RADIUS,
+  SPACING
 } from "../../constants"
 import { supabase } from "../../services/supabase"
 import { useAuthStore } from "../../store/authStore"
 import { useQuestionStore } from "../../store/questionStore"
 
 type Course = {
-id:string
-name:string
-color_code:string
-sort_order:number
+  id: string
+  name: string
+  color_code: string
+  sort_order: number
+  questionCount?: number
 }
 
 export default function LibraryScreen(){
@@ -47,17 +48,21 @@ const { data, error } = await supabase
 .eq("mode",profile.mode)
 .order("sort_order")
 
-if(!error && data){
-setCourses(data)
-}
-
-const { count } = await supabase
-.from("questions")
-.select("*",{ count:"exact", head:true })
-
-if(count){
-setTotalQuestions(count)
-}
+if (!error && data) {
+      const withCounts = await Promise.all(
+        data.map(async (course: any) => {
+          const { count } = await supabase
+            .from("questions")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", profile.id)
+            .eq("course_id", course.id)
+          return { ...course, questionCount: count || 0 }
+        })
+      )
+      setCourses(withCounts)
+      const total = withCounts.reduce((sum: number, c: any) => sum + (c.questionCount || 0), 0)
+setTotalQuestions(total)
+    }
 
 }
 const filtered = courses.filter((c:any) =>
@@ -103,12 +108,12 @@ styles.countBadge,
 { backgroundColor:item.color_code }
 ]}
 >
-<Text style={styles.countText}>0</Text>
+<Text style={styles.countText}>{item.questionCount || 0}</Text>
 </View>
 
 <View style={{flex:1}}>
 <Text style={styles.courseName}>{item.name}</Text>
-<Text style={styles.courseSub}>0 soru arşivde</Text>
+<Text style={styles.courseSub}>{item.questionCount || 0} soru arşivde</Text>
 </View>
 
 <Text style={styles.arrow}>›</Text>

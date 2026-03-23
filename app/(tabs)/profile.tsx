@@ -255,6 +255,7 @@ export default function ProfileScreen() {
               <Text style={styles.expandArrow}>{reportExpanded ? "▲" : "▼"}</Text>
             </View>
           </View>
+          
 
           {reportExpanded && weeklyStats && (
             <View style={styles.reportBody}>
@@ -330,6 +331,19 @@ export default function ProfileScreen() {
             <Text style={styles.overviewLabel}>En Çok Yüklenen</Text>
           </View>
         </View>
+        {/* Değerlendirme Testi */}
+        <TouchableOpacity
+          style={styles.reviewTestCard}
+          onPress={() => router.push("/review/test" as any)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.reviewTestEmoji}>📝</Text>
+          <View style={styles.reviewTestInfo}>
+            <Text style={styles.reviewTestTitle}>Değerlendirme Testi</Text>
+            <Text style={styles.reviewTestDesc}>Son 15 günün sorularından kendini test et</Text>
+          </View>
+          <Text style={styles.reviewTestArrow}>›</Text>
+        </TouchableOpacity>
 
         {/* Ayarlar */}
         <View style={styles.settingsCard}>
@@ -564,6 +578,22 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
     marginTop: 2,
   },
+  reviewTestCard: {
+    backgroundColor: COLORS.accentLight,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.accent + "30",
+  },
+  reviewTestEmoji: { fontSize: 32 },
+  reviewTestInfo: { flex: 1 },
+  reviewTestTitle: { fontSize: FONT_SIZES.md + 1, fontWeight: FONT_WEIGHTS.bold, color: COLORS.navy },
+  reviewTestDesc: { fontSize: FONT_SIZES.sm, color: COLORS.accent, marginTop: 2 },
+  reviewTestArrow: { fontSize: 22, color: COLORS.accent },
 
   // Ayarlar
   settingsCard: {

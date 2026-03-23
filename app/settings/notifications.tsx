@@ -40,24 +40,6 @@ export default function NotificationSettings() {
           </View>
         </View>
 
-        {/* Günlük hatırlatma */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>📅 Günlük Hatırlatma</Text>
-          <Text style={styles.cardDesc}>
-            Her gün belirli bir saatte çalışmaya devam etmen için hatırlatma gönder.
-          </Text>
-
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Günlük bildirim</Text>
-            <Switch
-              value={dailyReminder}
-              onValueChange={setDailyReminder}
-              trackColor={{ false: COLORS.gray200, true: COLORS.accent }}
-              thumbColor={COLORS.white}
-            />
-          </View>
-        </View>
-
         {/* Haftalık rapor */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>📋 Haftalık Rapor</Text>

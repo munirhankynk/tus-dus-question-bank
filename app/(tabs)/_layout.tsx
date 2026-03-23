@@ -39,13 +39,13 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: {
+          tabBarStyle: {
           backgroundColor: COLORS.white,
           borderTopColor: COLORS.gray100,
           borderTopWidth: 1,
-          height: 80,
-          paddingTop: 8,
-          paddingBottom: 20,
+          height: 65,
+          paddingTop: 6,
+          paddingBottom: 16,
         },
       }}
     >
@@ -100,19 +100,21 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabItem: {
+    tabItem: {
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
+    width: 60,
   },
   tabLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: 9,
     fontWeight: FONT_WEIGHTS.semibold,
+    textAlign: "center",
   },
   centerTab: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -15,
+    marginTop: -10,
   },
   centerIcon: {
     width: 50,

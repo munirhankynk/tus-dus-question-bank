@@ -87,6 +87,8 @@ keyboardShouldPersistTaps="handled"
   value={password}
   onChangeText={setPassword}
   secureTextEntry
+  autoComplete="off"
+  autoCorrect={false}
 />
 
 <Text style={styles.passwordHint}>
@@ -101,6 +103,8 @@ secureTextEntry
 value={confirmPassword}
 onChangeText={setConfirmPassword}
 autoCapitalize="none"
+autoComplete="off"
+autoCorrect={false}
 />
 
 <TouchableOpacity

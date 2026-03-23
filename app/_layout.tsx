@@ -1,5 +1,5 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../constants';
 import { supabase } from '../services/supabase';
@@ -10,19 +10,32 @@ export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const segments = useSegments();
   const router = useRouter();
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
+    let mounted = true;
+
     const init = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Timeout ekle — 5 saniye içinde cevap gelmezse devam et
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 5000)
+        );
 
-        if (session?.user) {
-          setSession(session);
+        const sessionPromise = supabase.auth.getSession();
+
+        const { data: { session: currentSession } } = await Promise.race([
+          sessionPromise,
+          timeout,
+        ]) as any;
+
+        if (currentSession?.user) {
+          setSession(currentSession);
 
           const { data: profileData } = await supabase
             .from('users')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('id', currentSession.user.id)
             .single();
 
           if (profileData) {
@@ -30,50 +43,80 @@ export default function RootLayout() {
           }
         }
       } catch (e) {
-        console.log('Init error:', e);
+        console.log('Init error or timeout:', e);
+        // Session alınamadıysa login'e yönlendir
       }
 
       setIsReady(true);
     };
-
     init();
 
+    // Auth değişikliklerini dinle
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        setSession(newSession);
+        if (!mounted) return;
+        
+        console.log('AUTH EVENT:', event);
+
+        // Token refresh başarısız olursa session'ı korumaya çalış
+        if (event === 'TOKEN_REFRESHED' && !newSession) {
+          console.log('Token refresh failed, keeping current session');
+          return;
+        }
+
+        // Sadece gerçek sign out'ta session'ı sil
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setProfile(null);
+          hasNavigated.current = false;
+          return;
+        }
 
         if (newSession?.user) {
+          setSession(newSession);
+          hasNavigated.current = false;
+
           const { data: profileData } = await supabase
             .from('users')
             .select('*')
             .eq('id', newSession.user.id)
             .single();
 
-          if (profileData) {
+          if (mounted && profileData) {
             setProfile(profileData);
           }
-        } else {
-          setProfile(null);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
+  // Yönlendirme — sadece 1 kez
   useEffect(() => {
     if (!isReady) return;
+    if (hasNavigated.current) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!session) {
-      if (!inAuthGroup) router.replace('/(auth)/login' as any);
+      if (!inAuthGroup) {
+        hasNavigated.current = true;
+        router.replace('/(auth)/login' as any);
+      }
     } else if (!profile) {
       if (segments.join('/') !== '(auth)/profile-setup') {
+        hasNavigated.current = true;
         router.replace('/(auth)/profile-setup' as any);
       }
     } else {
-      if (inAuthGroup) router.replace('/(tabs)/library' as any);
+      if (inAuthGroup) {
+        hasNavigated.current = true;
+        router.replace('/(tabs)/library' as any);
+      }
     }
   }, [session, profile, isReady]);
 
@@ -88,7 +131,7 @@ export default function RootLayout() {
     );
   }
 
-return <Stack screenOptions={{ headerShown: false }} />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
 
 const styles = StyleSheet.create({

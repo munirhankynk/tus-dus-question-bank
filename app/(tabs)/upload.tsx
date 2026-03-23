@@ -40,7 +40,14 @@ export default function UploadScreen() {
   const { profile } = useAuthStore()
   const { triggerRefresh } = useQuestionStore()
 
-  const [imageUris, setImageUris] = useState<string[]>([])
+  type ImageItem = {
+    uri: string
+    status: "uploading" | "done" | "error"
+    publicUrl?: string
+    storagePath?: string
+  }
+
+  const [images, setImages] = useState<ImageItem[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
   const [showCourseList, setShowCourseList] = useState(false)
@@ -63,8 +70,58 @@ export default function UploadScreen() {
       .order("sort_order")
     if (data) setCourses(data)
   }
+// Fotoğraf seçilince hemen Storage'a yüklemeye başla
+  const uploadToStorage = async (uri: string, index: number) => {
+    if (!profile) return
 
-  // Galeriden çoklu fotoğraf seç
+    try {
+      const fileName = `${profile.id}/${Date.now()}_${index}.jpg`
+      const response = await fetch(uri)
+      const arrayBuffer = await response.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+
+      const { data: uploadData, error } = await supabase.storage
+        .from("question-images")
+        .upload(fileName, uint8Array, { contentType: "image/jpeg", upsert: false })
+
+      if (error) {
+        setImages((prev) => prev.map((img) =>
+          img.uri === uri ? { ...img, status: "error" as const } : img
+        ))
+        return
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("question-images")
+        .getPublicUrl(uploadData.path)
+
+      setImages((prev) => prev.map((img) =>
+        img.uri === uri
+          ? { ...img, status: "done" as const, publicUrl: urlData.publicUrl, storagePath: uploadData.path }
+          : img
+      ))
+    } catch {
+      setImages((prev) => prev.map((img) =>
+        img.uri === uri ? { ...img, status: "error" as const } : img
+      ))
+    }
+  }
+
+  const addImages = (uris: string[]) => {
+    const newItems: ImageItem[] = uris.map((uri) => ({
+      uri,
+      status: "uploading" as const,
+    }))
+
+    setImages((prev) => {
+      const updated = [...prev, ...newItems]
+      newItems.forEach((item, i) => {
+        uploadToStorage(item.uri, prev.length + i)
+      })
+      return updated
+    })
+  }
+
   const pickFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== "granted") {
@@ -79,12 +136,10 @@ export default function UploadScreen() {
     })
 
     if (!result.canceled && result.assets.length > 0) {
-      const newUris = result.assets.map((a) => a.uri)
-      setImageUris((prev) => [...prev, ...newUris])
+      addImages(result.assets.map((a) => a.uri))
     }
   }
 
-  // Kameradan tek fotoğraf çek
   const pickFromCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
     if (status !== "granted") {
@@ -98,7 +153,7 @@ export default function UploadScreen() {
     })
 
     if (!result.canceled && result.assets[0]) {
-      setImageUris((prev) => [...prev, result.assets[0].uri])
+      addImages([result.assets[0].uri])
     }
   }
 
@@ -110,9 +165,13 @@ export default function UploadScreen() {
     ])
   }
 
-  // Tek fotoğraf kaldır
-  const removeImage = (index: number) => {
-    setImageUris((prev) => prev.filter((_, i) => i !== index))
+  const removeImage = async (index: number) => {
+    const img = images[index]
+    // Storage'dan da sil
+    if (img.storagePath) {
+      await supabase.storage.from("question-images").remove([img.storagePath])
+    }
+    setImages((prev) => prev.filter((_, i) => i !== index))
   }
 
   // Etiket işlemleri
@@ -225,41 +284,100 @@ export default function UploadScreen() {
     return questionData
   }
 
-  // Tümünü kaydet
   const handleSave = async () => {
-    if (imageUris.length === 0) { Alert.alert("Hata", "En az 1 fotoğraf ekle"); return }
+    if (images.length === 0) { Alert.alert("Hata", "En az 1 fotoğraf ekle"); return }
     if (!selectedCourse) { Alert.alert("Hata", "Ders seç"); return }
     if (!status) { Alert.alert("Hata", "Soru durumu seç"); return }
     if (!profile) return
 
+    // Hâlâ yüklenen var mı kontrol et
+    const stillUploading = images.some((img) => img.status === "uploading")
+    if (stillUploading) {
+      Alert.alert("Bekle", "Fotoğraflar hâlâ yükleniyor...")
+      return
+    }
+
+    // Hatalı olanlar var mı
+    const failed = images.filter((img) => img.status === "error")
+    if (failed.length > 0) {
+      Alert.alert("Hata", `${failed.length} fotoğraf yüklenemedi. Onları kaldırıp tekrar dene.`)
+      return
+    }
+
     setUploading(true)
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
       let successCount = 0
 
-      for (let i = 0; i < imageUris.length; i++) {
-        await uploadSingleQuestion(imageUris[i], i, imageUris.length)
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i]
+        if (!img.publicUrl) continue
+
+        setUploadProgress(`${i + 1}/${images.length} kaydediliyor...`)
+
+        // Soruyu kaydet
+        const { data: questionData, error: questionError } = await supabase
+          .from("questions")
+          .insert({
+            user_id: user?.id,
+            course_id: selectedCourse.id,
+            image_url: img.publicUrl,
+            status: status,
+            note: images.length === 1 ? (note.trim() || null) : null,
+            is_favorite: false,
+          })
+          .select()
+          .single()
+
+        if (questionError) continue
+
+        // Etiketleri kaydet
+        for (const tagName of tags) {
+          let tagId: string
+
+          const { data: existingTag } = await supabase
+            .from("tags")
+            .select("id")
+            .eq("user_id", profile.id)
+            .eq("course_id", selectedCourse.id)
+            .ilike("name", tagName)
+            .single()
+
+          if (existingTag) {
+            tagId = existingTag.id
+          } else {
+            const { data: newTag } = await supabase
+              .from("tags")
+              .insert({ user_id: profile.id, course_id: selectedCourse.id, name: tagName })
+              .select()
+              .single()
+            if (!newTag) continue
+            tagId = newTag.id
+          }
+
+          await supabase
+            .from("question_tags")
+            .insert({ question_id: questionData.id, tag_id: tagId })
+        }
+
         successCount++
       }
 
       setUploadProgress("")
 
-      Alert.alert(
-        "Başarılı! 🎉",
-        `${successCount} soru arşive eklendi.`,
-        [{
-          text: "Tamam",
-          onPress: () => {
-            setImageUris([])
-            setSelectedCourse(null)
-            setStatus(null)
-            setNote("")
-            setTags([])
-            setTagInput("")
-            triggerRefresh()
-          },
-        }]
-      )
+      Alert.alert("Başarılı! 🎉", `${successCount} soru arşive eklendi.`, [{
+        text: "Tamam",
+        onPress: () => {
+          setImages([])
+          setSelectedCourse(null)
+          setStatus(null)
+          setNote("")
+          setTags([])
+          setTagInput("")
+          triggerRefresh()
+        },
+      }])
     } catch (err: any) {
       setUploadProgress("")
       Alert.alert("Hata", err.message || "Bir şeyler yanlış gitti")
@@ -272,9 +390,9 @@ export default function UploadScreen() {
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: COLORS.navy }}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Soru Yükle</Text>
-        {imageUris.length > 0 && (
+        {images.length > 0 && (
           <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{imageUris.length} fotoğraf</Text>
+            <Text style={styles.countBadgeText}>{images.length} fotoğraf</Text>
           </View>
         )}
       </View>
@@ -289,7 +407,7 @@ export default function UploadScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Fotoğraf alanı */}
-          {imageUris.length === 0 ? (
+          {images.length === 0 ? (
             <TouchableOpacity style={styles.photoArea} onPress={showImageOptions}>
               <View style={styles.photoPlaceholder}>
                 <Text style={styles.photoIcon}>📷</Text>
@@ -299,18 +417,28 @@ export default function UploadScreen() {
             </TouchableOpacity>
           ) : (
             <View style={styles.imageGrid}>
-              {imageUris.map((uri, index) => (
+              {images.map((img, index) => (
                 <View key={index} style={styles.imageGridItem}>
-                  <Image source={{ uri }} style={styles.imageGridThumb} resizeMode="cover" />
-                  <TouchableOpacity
-                    style={styles.imageRemoveBtn}
-                    onPress={() => removeImage(index)}
-                  >
+                  <Image source={{ uri: img.uri }} style={styles.imageGridThumb} resizeMode="cover" />
+                  <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => removeImage(index)}>
                     <Text style={styles.imageRemoveText}>✕</Text>
                   </TouchableOpacity>
-                  <View style={styles.imageIndexBadge}>
-                    <Text style={styles.imageIndexText}>{index + 1}</Text>
-                  </View>
+                  {/* Yükleme durumu */}
+                  {img.status === "uploading" && (
+                    <View style={styles.imageOverlay}>
+                      <Text style={styles.imageOverlayText}>⏳</Text>
+                    </View>
+                  )}
+                  {img.status === "done" && (
+                    <View style={styles.imageIndexBadge}>
+                      <Text style={styles.imageIndexText}>✓</Text>
+                    </View>
+                  )}
+                  {img.status === "error" && (
+                    <View style={[styles.imageOverlay, { backgroundColor: "rgba(239,68,68,0.6)" }]}>
+                      <Text style={styles.imageOverlayText}>✕</Text>
+                    </View>
+                  )}
                 </View>
               ))}
 
@@ -357,7 +485,7 @@ export default function UploadScreen() {
           )}
 
           {/* Soru Durumu */}
-          <Text style={styles.label}>Soru Durumu {imageUris.length > 1 ? `(${imageUris.length} soru için geçerli)` : ""}</Text>
+          <Text style={styles.label}>Soru Durumu {images.length > 1 ? `(${images.length} soru için geçerli)` : ""}</Text>
           <View style={styles.statusRow}>
             {(["failed", "skipped", "solved"] as const).map((s) => {
               const sc = STATUS_COLORS[s]
@@ -378,7 +506,7 @@ export default function UploadScreen() {
           </View>
 
           {/* Etiketler */}
-          <Text style={styles.label}>Etiketler {imageUris.length > 1 ? "(tümüne eklenir)" : ""}</Text>
+          <Text style={styles.label}>Etiketler {images.length > 1 ? "(tümüne eklenir)" : ""}</Text>
           <View style={styles.tagsContainer}>
             {tags.map((t) => (
               <View key={t} style={styles.tagChip}>
@@ -409,7 +537,7 @@ export default function UploadScreen() {
           )}
 
           {/* Not — sadece tekli yüklemede */}
-          {imageUris.length <= 1 && (
+          {images.length <= 1 && (
             <>
               <Text style={styles.label}>Not (opsiyonel)</Text>
               <TextInput
@@ -422,10 +550,10 @@ export default function UploadScreen() {
             </>
           )}
 
-          {imageUris.length > 1 && (
+          {images.length > 1 && (
             <View style={styles.multiInfo}>
               <Text style={styles.multiInfoText}>
-                ℹ️ {imageUris.length} soru aynı derse, duruma ve etiketlere sahip olacak. Not sadece tekli yüklemede eklenebilir.
+                ℹ️ {images.length} soru aynı derse, duruma ve etiketlere sahip olacak. Not sadece tekli yüklemede eklenebilir.
               </Text>
             </View>
           )}
@@ -439,8 +567,8 @@ export default function UploadScreen() {
             <Text style={styles.saveBtnText}>
               {uploading
                 ? uploadProgress || "Yükleniyor..."
-                : imageUris.length > 1
-                ? `${imageUris.length} Soruyu Arşive Kaydet`
+                : images.length > 1
+                ? `${images.length} Soruyu Arşive Kaydet`
                 : "Arşive Kaydet"}
             </Text>
           </TouchableOpacity>
@@ -514,6 +642,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     justifyContent: "center", alignItems: "center",
   },
+  imageOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: RADIUS.md,
+  },
+  imageOverlayText: { fontSize: 20, color: COLORS.white },
+
   addMoreIcon: { fontSize: 28, color: COLORS.gray300 },
   addMoreText: { fontSize: FONT_SIZES.xs, color: COLORS.gray300, marginTop: 2 },
 

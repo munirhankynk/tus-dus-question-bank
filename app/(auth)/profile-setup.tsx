@@ -74,10 +74,13 @@ Sana özel deneyim için birkaç bilgi
 <Text style={styles.label}>Adın</Text>
 
 <TextInput
-style={styles.input}
-placeholder="Adın"
-value={name}
-onChangeText={setName}
+  style={styles.input}
+  placeholder="Adın"
+  value={name}
+  onChangeText={setName}
+  autoComplete="off"
+  textContentType="oneTimeCode"
+  autoCorrect={false}
 />
 
 <Text style={styles.label}>Hangi sınava hazırlanıyorsun?</Text>
@@ -115,6 +118,9 @@ style={styles.input}
 placeholder="Üniversite..."
 value={university}
 onChangeText={setUniversity}
+autoComplete="off"
+autoCorrect={false}
+textContentType="none"
 />
 
 <Text style={styles.label}>Kaçıncı kez giriyorsun?</Text>
