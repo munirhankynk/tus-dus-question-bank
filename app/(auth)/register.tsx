@@ -50,7 +50,13 @@ Alert.alert("Kayıt Hatası",error.message)
 return
 }
 
-router.replace('/(auth)/profile-setup')
+// Kayıt başarılı — önce mevcut session'ı temizle, giriş ekranına yönlendir
+await supabase.auth.signOut()
+Alert.alert(
+  "Kayıt Başarılı!",
+  "Hesabın oluşturuldu. Şimdi giriş yapabilirsin.",
+  [{ text: "Giriş Yap", onPress: () => router.replace('/(auth)/login') }]
+)
 
 }
 
@@ -78,17 +84,19 @@ keyboardShouldPersistTaps="handled"
   onChangeText={setEmail}
   keyboardType="email-address"
   autoCapitalize="none"
+  textContentType="oneTimeCode"
 />
 
 <TextInput
   style={styles.input}
-  placeholder="Şifre"
-  placeholderTextColor={COLORS.gray300}
+  placeholder="••••••••"
   value={password}
   onChangeText={setPassword}
   secureTextEntry
   autoComplete="off"
+  textContentType="oneTimeCode"
   autoCorrect={false}
+  spellCheck={false}
 />
 
 <Text style={styles.passwordHint}>
@@ -96,15 +104,15 @@ keyboardShouldPersistTaps="handled"
 </Text>
 
 <TextInput
-placeholder="Şifre Tekrar"
-placeholderTextColor={COLORS.gray300}
-style={styles.input}
-secureTextEntry
-value={confirmPassword}
-onChangeText={setConfirmPassword}
-autoCapitalize="none"
-autoComplete="off"
-autoCorrect={false}
+  style={styles.input}
+  placeholder="Şifreyi tekrar girin"
+  value={confirmPassword}
+  onChangeText={setConfirmPassword}
+  secureTextEntry
+  autoComplete="off"
+  textContentType="oneTimeCode"
+  autoCorrect={false}
+  spellCheck={false}
 />
 
 <TouchableOpacity

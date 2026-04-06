@@ -51,7 +51,7 @@ const FILTERS: { id: FilterId; label: string }[] = [
 ]
 
 export default function CourseScreen() {
-  const { courseId } = useLocalSearchParams<{ courseId: string }>()
+  const { courseId, groupId } = useLocalSearchParams<{ courseId: string; groupId?: string }>()
   const router = useRouter()
   const { profile } = useAuthStore()
   const { triggerRefresh } = useQuestionStore()
@@ -84,12 +84,21 @@ export default function CourseScreen() {
 
     if (courseData) setCourse(courseData)
 
-    // Soruları çek
+    // Soruları çek — grup seçiliyse gruptaki tüm üyelerin soruları
+    let userIds = [profile?.id || ""]
+    if (groupId) {
+      const { data: members } = await supabase
+        .from("group_members")
+        .select("user_id")
+        .eq("group_id", groupId)
+      if (members) userIds = members.map(m => m.user_id)
+    }
+
     const { data: questionData } = await supabase
       .from("questions")
       .select("*")
       .eq("course_id", courseId)
-      .eq("user_id", profile?.id)
+      .in("user_id", userIds)
       .order("uploaded_at", { ascending: false })
 
     if (questionData) setQuestions(questionData)

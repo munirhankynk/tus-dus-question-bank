@@ -2,6 +2,7 @@ import { router } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +17,7 @@ import {
   RADIUS,
   SPACING
 } from "../../constants"
+import { getCourseIcon } from "../../constants/courseIcons"
 import { supabase } from "../../services/supabase"
 import { useAuthStore } from "../../store/authStore"
 import { useQuestionStore } from "../../store/questionStore"
@@ -28,6 +30,11 @@ type Course = {
   questionCount?: number
 }
 
+type GroupOption = {
+  id: string
+  name: string
+}
+
 export default function LibraryScreen(){
 
 const { profile } = useAuthStore()
@@ -36,7 +43,27 @@ const [search,setSearch] = useState("")
 const [totalQuestions,setTotalQuestions] = useState(0)
 const { refreshCounter } = useQuestionStore()
 
-useEffect(() => { loadCourses() }, [refreshCounter])
+// Grup filtresi: null = benim sorularım, groupId = grup soruları
+const [groups, setGroups] = useState<GroupOption[]>([])
+const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+
+useEffect(() => { loadCourses(); loadGroups() }, [refreshCounter, profile])
+useEffect(() => { loadCourses() }, [selectedGroupId])
+
+const loadGroups = async () => {
+  if (!profile?.is_premium) return
+  const { data: memberships } = await supabase
+    .from("group_members")
+    .select("group_id")
+    .eq("user_id", profile.id)
+  if (!memberships || memberships.length === 0) return
+  const groupIds = memberships.map(m => m.group_id)
+  const { data: groupsData } = await supabase
+    .from("groups")
+    .select("id, name")
+    .in("id", groupIds)
+  if (groupsData) setGroups(groupsData)
+}
 
 const loadCourses = async () => {
 
@@ -49,12 +76,22 @@ const { data, error } = await supabase
 .order("sort_order")
 
 if (!error && data) {
+      // Grup seçiliyse gruptaki tüm üyelerin sorularını say
+      let userIds = [profile.id]
+      if (selectedGroupId) {
+        const { data: members } = await supabase
+          .from("group_members")
+          .select("user_id")
+          .eq("group_id", selectedGroupId)
+        if (members) userIds = members.map(m => m.user_id)
+      }
+
       const withCounts = await Promise.all(
         data.map(async (course: any) => {
           const { count } = await supabase
             .from("questions")
             .select("*", { count: "exact", head: true })
-            .eq("user_id", profile.id)
+            .in("user_id", userIds)
             .eq("course_id", course.id)
           return { ...course, questionCount: count || 0 }
         })
@@ -91,6 +128,27 @@ onChangeText={setSearch}
 style={styles.search}
 />
 
+{groups.length > 0 && (
+  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupFilterScroll} contentContainerStyle={styles.groupFilterContent}>
+    <TouchableOpacity
+      style={[styles.groupChip, !selectedGroupId && styles.groupChipActive]}
+      onPress={() => setSelectedGroupId(null)}
+    >
+      <Text style={[styles.groupChipText, !selectedGroupId && styles.groupChipTextActive]}>Benim Sorularım</Text>
+    </TouchableOpacity>
+    {groups.map((g) => (
+      <TouchableOpacity
+        key={g.id}
+        style={[styles.groupChip, selectedGroupId === g.id && styles.groupChipActive]}
+        onPress={() => setSelectedGroupId(g.id)}
+      >
+        <Text style={{ fontSize: 12 }}>👥</Text>
+        <Text style={[styles.groupChipText, selectedGroupId === g.id && styles.groupChipTextActive]}>{g.name}</Text>
+      </TouchableOpacity>
+    ))}
+  </ScrollView>
+)}
+
 <FlatList
 data={filtered}
 keyExtractor={(item)=>item.id}
@@ -99,21 +157,25 @@ renderItem={({item})=>(
 
 <TouchableOpacity
 style={styles.courseCard}
-onPress={() => router.push(`/course/${item.id}` as any)}
+onPress={() => router.push(`/course/${item.id}${selectedGroupId ? `?groupId=${selectedGroupId}` : ""}` as any)}
 >
 
 <View
 style={[
 styles.countBadge,
-{ backgroundColor:item.color_code }
+{ backgroundColor: getCourseIcon(item.name).color + '20' }
 ]}
 >
-<Text style={styles.countText}>{item.questionCount || 0}</Text>
+<Text style={styles.courseIcon}>{getCourseIcon(item.name).icon}</Text>
 </View>
 
 <View style={{flex:1}}>
 <Text style={styles.courseName}>{item.name}</Text>
 <Text style={styles.courseSub}>{item.questionCount || 0} soru arşivde</Text>
+</View>
+
+<View style={[styles.courseCountBadge, { backgroundColor: getCourseIcon(item.name).color }]}>
+  <Text style={styles.countText}>{item.questionCount || 0}</Text>
 </View>
 
 <Text style={styles.arrow}>›</Text>
@@ -189,18 +251,29 @@ marginBottom:SPACING.md
 },
 
 countBadge:{
-width:42,
-height:42,
-borderRadius:12,
+width:46,
+height:46,
+borderRadius:14,
 justifyContent:"center",
 alignItems:"center",
 marginRight:SPACING.md
 },
 
+courseIcon:{
+fontSize:24,
+},
+
+courseCountBadge:{
+paddingHorizontal:8,
+paddingVertical:4,
+borderRadius:10,
+marginRight:SPACING.sm,
+},
+
 countText:{
 color:"#fff",
 fontWeight:"bold",
-fontSize:FONT_SIZES.md
+fontSize:FONT_SIZES.xs + 1,
 },
 
 courseName:{
@@ -216,6 +289,18 @@ fontSize:12
 arrow:{
 fontSize:22,
 color:"#999"
-}
+},
+
+// Grup filtresi
+groupFilterScroll: { flexGrow: 0, marginTop: SPACING.sm },
+groupFilterContent: { paddingHorizontal: SPACING.lg, gap: SPACING.sm },
+groupChip: {
+  flexDirection: "row", alignItems: "center", gap: 4,
+  paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.full,
+  backgroundColor: COLORS.white, borderWidth: 1.5, borderColor: COLORS.gray100,
+},
+groupChipActive: { backgroundColor: COLORS.accentLight, borderColor: COLORS.accent },
+groupChipText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.gray400 },
+groupChipTextActive: { color: COLORS.accent },
 
 })

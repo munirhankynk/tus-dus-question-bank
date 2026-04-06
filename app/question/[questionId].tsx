@@ -28,6 +28,9 @@ type Question = {
   course_id: string
   image_url: string
   status: "failed" | "skipped" | "solved"
+  correct_answer: string | null
+  question_text: string | null
+  options: Record<string, string> | null
   is_favorite: boolean
   note: string | null
   uploaded_at: string
@@ -125,12 +128,18 @@ export default function QuestionDetailScreen() {
   const handleChangeStatus = async (newStatus: "failed" | "skipped" | "solved") => {
     if (!question) return
 
+    const updates: any = { status: newStatus }
+    // Doğru yapıldıysa correct_answer'ı temizle
+    if (newStatus === "solved") {
+      updates.correct_answer = null
+    }
+
     await supabase
       .from("questions")
-      .update({ status: newStatus })
+      .update(updates)
       .eq("id", question.id)
 
-    setQuestion({ ...question, status: newStatus })
+    setQuestion({ ...question, ...updates })
   }
 
   const handleDelete = () => {
@@ -253,6 +262,19 @@ export default function QuestionDetailScreen() {
         ) : (
           <View style={styles.imagePlaceholder}>
             <Text style={{ fontSize: 48, opacity: 0.3 }}>📄</Text>
+          </View>
+        )}
+
+        {/* AI taranmış metin */}
+        {question.question_text && (
+          <View style={styles.scannedCard}>
+            <Text style={styles.scannedTitle}>Soru Metni (AI)</Text>
+            <Text style={styles.scannedText}>{question.question_text}</Text>
+            {question.options && Object.entries(question.options).map(([key, val]) => (
+              <Text key={key} style={styles.scannedOption}>
+                <Text style={{ fontWeight: FONT_WEIGHTS.bold }}>{key})</Text> {val}
+              </Text>
+            ))}
           </View>
         )}
 
@@ -463,6 +485,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: SPACING.md,
   },
+
+  // AI taranmış metin
+  scannedCard: {
+    backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.md,
+    marginBottom: SPACING.sm, borderWidth: 1.5, borderColor: COLORS.accent + "30",
+  },
+  scannedTitle: {
+    fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.bold, color: COLORS.accent,
+    marginBottom: SPACING.sm,
+  },
+  scannedText: { fontSize: FONT_SIZES.sm + 1, color: COLORS.navy, lineHeight: 20, marginBottom: SPACING.sm },
+  scannedOption: { fontSize: FONT_SIZES.sm, color: COLORS.gray400, lineHeight: 18, marginLeft: SPACING.xs },
 
   infoCard: {
     backgroundColor: COLORS.white,

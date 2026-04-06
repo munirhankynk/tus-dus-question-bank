@@ -13,6 +13,9 @@ export interface Question {
   course_id: string;
   image_url: string;
   status: 'failed' | 'skipped' | 'solved';
+  correct_answer: string | null;
+  question_text: string | null;
+  options: Record<string, string> | null;
   is_favorite: boolean;
   note: string | null;
   uploaded_at: string;

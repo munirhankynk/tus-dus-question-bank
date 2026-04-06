@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -201,19 +202,23 @@ export default function ProfileScreen() {
         {/* Kullanıcı kartı */}
         <View style={styles.userCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {profile?.name?.charAt(0).toUpperCase() || "?"}
+            <Text style={styles.avatarEmoji}>
+              {profile?.gender === "female" ? "👩‍⚕️" : "👨‍⚕️"}
             </Text>
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{profile?.name || "Kullanıcı"}</Text>
+            <Text style={styles.userName}>
+              {profile?.mode === "DUS" ? "Dt." : "Dr."} {profile?.name || "Kullanıcı"}
+            </Text>
+            {profile?.username && (
+              <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.gray300, marginTop: 1 }}>@{profile.username}</Text>
+            )}
             <Text style={styles.userMeta}>
               {profile?.mode || ""}
               {profile?.university ? ` • ${profile.university}` : ""}
               {profile?.attempt_number ? ` • ${profile.attempt_number}. kez` : ""}
             </Text>
           </View>
-          {/* TODO: Streak sistemi buraya gelecek */}
         </View>
 
         {/* Streak placeholder — sonra eklenecek */}
@@ -331,20 +336,6 @@ export default function ProfileScreen() {
             <Text style={styles.overviewLabel}>En Çok Yüklenen</Text>
           </View>
         </View>
-        {/* Değerlendirme Testi */}
-        <TouchableOpacity
-          style={styles.reviewTestCard}
-          onPress={() => router.push("/review/test" as any)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.reviewTestEmoji}>📝</Text>
-          <View style={styles.reviewTestInfo}>
-            <Text style={styles.reviewTestTitle}>Değerlendirme Testi</Text>
-            <Text style={styles.reviewTestDesc}>Son 15 günün sorularından kendini test et</Text>
-          </View>
-          <Text style={styles.reviewTestArrow}>›</Text>
-        </TouchableOpacity>
-
         {/* Ayarlar */}
         <View style={styles.settingsCard}>
           {[
@@ -408,17 +399,15 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: COLORS.navy,
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: COLORS.accentLight,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: FONT_WEIGHTS.extrabold,
+  avatarEmoji: {
+    fontSize: 34,
   },
   userInfo: {
     flex: 1,
@@ -578,23 +567,6 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
     marginTop: 2,
   },
-  reviewTestCard: {
-    backgroundColor: COLORS.accentLight,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.accent + "30",
-  },
-  reviewTestEmoji: { fontSize: 32 },
-  reviewTestInfo: { flex: 1 },
-  reviewTestTitle: { fontSize: FONT_SIZES.md + 1, fontWeight: FONT_WEIGHTS.bold, color: COLORS.navy },
-  reviewTestDesc: { fontSize: FONT_SIZES.sm, color: COLORS.accent, marginTop: 2 },
-  reviewTestArrow: { fontSize: 22, color: COLORS.accent },
-
   // Ayarlar
   settingsCard: {
     backgroundColor: COLORS.white,

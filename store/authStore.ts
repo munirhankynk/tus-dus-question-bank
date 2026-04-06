@@ -5,10 +5,13 @@ import { supabase } from '../services/supabase';
 export interface UserProfile {
   id: string;
   name: string;
+  username: string;
+  gender: 'male' | 'female';
   mode: 'TUS' | 'DUS';
   university: string | null;
   attempt_number: number | null;
   streak_count: number;
+  is_premium: boolean;
   last_active_date: string | null;
   created_at: string;
   updated_at: string;
@@ -56,7 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'global' });
     set({ user: null, profile: null, session: null });
   },
 }));

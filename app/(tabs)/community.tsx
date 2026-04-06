@@ -40,7 +40,6 @@ export default function CommunityScreen() {
     if (!profile) return
     setLoading(true)
 
-    // Bu haftanın başlangıcı (Pazartesi)
     const now = new Date()
     const dayOfWeek = now.getDay()
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
@@ -49,7 +48,6 @@ export default function CommunityScreen() {
     monday.setHours(0, 0, 0, 0)
     const mondayStr = monday.toISOString()
 
-    // Bu modun derslerini çek
     const { data: courses } = await supabase
       .from("courses")
       .select("id, name, color_code")
@@ -76,19 +74,14 @@ export default function CommunityScreen() {
       })
     )
 
-    // Sırala — en çok yüklenenden en aza
     stats.sort((a, b) => b.count - a.count)
     setCourseStats(stats)
 
-    // Toplam yükleme
     const total = stats.reduce((sum, s) => sum + s.count, 0)
     setTotalUploads(total)
 
-    // Bu moddaki aktif kullanıcı sayısı (bu hafta soru yükleyen)
-    // Bu moddaki derslerin ID'lerini al
     const courseIds = courses.map((c: any) => c.id)
 
-    // Bu moddaki aktif kullanıcılar
     const { data: activeUsers } = await supabase
       .from("questions")
       .select("user_id")
@@ -108,7 +101,6 @@ export default function CommunityScreen() {
     ? courseStats.filter((c) => c.count > 0).slice(-1)[0] || null
     : null
 
-  // Hafta tarih aralığı
   const getWeekRange = (): string => {
     const now = new Date()
     const dayOfWeek = now.getDay()

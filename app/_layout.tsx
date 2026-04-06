@@ -1,33 +1,32 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../constants';
 import { supabase } from '../services/supabase';
 import { useAuthStore } from '../store/authStore';
 
+// Login OTP akışında geçici session'ı engellemek için global flag
+export let skipAuthRedirect = false;
+export function setSkipAuthRedirect(val: boolean) { skipAuthRedirect = val; }
+
 export default function RootLayout() {
   const { session, profile, setSession, setProfile } = useAuthStore();
   const [isReady, setIsReady] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const segments = useSegments();
   const router = useRouter();
-  const hasNavigated = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
     const init = async () => {
       try {
-        // Timeout ekle — 5 saniye içinde cevap gelmezse devam et
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 5000)
-        );
+        const obDone = await AsyncStorage.getItem('onboarding_done');
+        if (mounted) setOnboardingDone(obDone === 'true');
 
-        const sessionPromise = supabase.auth.getSession();
-
-        const { data: { session: currentSession } } = await Promise.race([
-          sessionPromise,
-          timeout,
-        ]) as any;
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
 
         if (currentSession?.user) {
           setSession(currentSession);
@@ -43,48 +42,27 @@ export default function RootLayout() {
           }
         }
       } catch (e) {
-        console.log('Init error or timeout:', e);
-        // Session alınamadıysa login'e yönlendir
+        console.log('Init error:', e);
       }
 
-      setIsReady(true);
+      if (mounted) setIsReady(true);
     };
     init();
 
-    // Auth değişikliklerini dinle
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+      (event, newSession) => {
         if (!mounted) return;
-        
+
         console.log('AUTH EVENT:', event);
 
-        // Token refresh başarısız olursa session'ı korumaya çalış
-        if (event === 'TOKEN_REFRESHED' && !newSession) {
-          console.log('Token refresh failed, keeping current session');
-          return;
-        }
-
-        // Sadece gerçek sign out'ta session'ı sil
         if (event === 'SIGNED_OUT') {
           setSession(null);
           setProfile(null);
-          hasNavigated.current = false;
           return;
         }
 
-        if (newSession?.user) {
+        if (newSession?.user && !skipAuthRedirect) {
           setSession(newSession);
-          hasNavigated.current = false;
-
-          const { data: profileData } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', newSession.user.id)
-            .single();
-
-          if (mounted && profileData) {
-            setProfile(profileData);
-          }
         }
       }
     );
@@ -95,30 +73,67 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Yönlendirme — sadece 1 kez
   useEffect(() => {
-    if (!isReady) return;
-    if (hasNavigated.current) return;
+    if (!session?.user?.id) return;
+    if (profile?.id === session.user.id) return; // Zaten yüklü
+
+    let cancelled = false;
+    setProfileLoading(true);
+
+    const fetchProfile = async () => {
+      try {
+        const { data: profileData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!cancelled) {
+          if (profileData) {
+            setProfile(profileData);
+          }
+          setProfileLoading(false);
+        }
+      } catch (e) {
+        console.log('Profile fetch error:', e);
+        if (!cancelled) setProfileLoading(false);
+      }
+    };
+
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
+
+  // 3) Navigation - profil yüklenirken bekle
+  useEffect(() => {
+    if (!isReady || profileLoading || onboardingDone === null) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const currentPath = segments.join('/');
+
+    // Onboarding henüz yapılmadıysa
+    if (!onboardingDone && !session) {
+      if (currentPath !== '(auth)/onboarding') {
+        router.replace('/(auth)/onboarding' as any);
+      }
+      return;
+    }
 
     if (!session) {
       if (!inAuthGroup) {
-        hasNavigated.current = true;
         router.replace('/(auth)/login' as any);
       }
     } else if (!profile) {
-      if (segments.join('/') !== '(auth)/profile-setup') {
-        hasNavigated.current = true;
+      // Kayıt ekranındayken profile-setup'a yönlendirme (signUp geçici session oluşturur)
+      if (currentPath !== '(auth)/profile-setup' && currentPath !== '(auth)/register') {
         router.replace('/(auth)/profile-setup' as any);
       }
     } else {
       if (inAuthGroup) {
-        hasNavigated.current = true;
         router.replace('/(tabs)/library' as any);
       }
     }
-  }, [session, profile, isReady]);
+  }, [session, profile, isReady, profileLoading, onboardingDone]);
 
   if (!isReady) {
     return (

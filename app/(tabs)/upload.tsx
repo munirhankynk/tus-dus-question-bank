@@ -1,5 +1,4 @@
 import * as ImagePicker from "expo-image-picker"
-import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   Alert,
@@ -36,7 +35,6 @@ type Course = {
 type QuestionStatus = "failed" | "skipped" | "solved"
 
 export default function UploadScreen() {
-  const router = useRouter()
   const { profile } = useAuthStore()
   const { triggerRefresh } = useQuestionStore()
 
@@ -59,7 +57,23 @@ export default function UploadScreen() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState("")
 
-  useEffect(() => { loadCourses() }, [])
+  // Günlük limit
+  const DAILY_LIMIT = 30
+  const [dailyCount, setDailyCount] = useState(0)
+
+  useEffect(() => { loadCourses(); loadDailyCount() }, [])
+
+  const loadDailyCount = async () => {
+    if (!profile) return
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const { count } = await supabase
+      .from("questions")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("uploaded_at", todayStart.toISOString())
+    setDailyCount(count || 0)
+  }
 
   const loadCourses = async () => {
     if (!profile) return
@@ -209,86 +223,23 @@ export default function UploadScreen() {
     }
   }
 
-  // Tek bir görseli yükle ve soruyu kaydet
-  const uploadSingleQuestion = async (imageUri: string, index: number, total: number) => {
-    if (!profile || !selectedCourse || !status) return null
-
-    setUploadProgress(`${index + 1}/${total} yükleniyor...`)
-
-    // Görseli Storage'a yükle
-    const fileName = `${profile.id}/${Date.now()}_${index}.jpg`
-    const response = await fetch(imageUri)
-    const arrayBuffer = await response.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("question-images")
-      .upload(fileName, uint8Array, { contentType: "image/jpeg", upsert: false })
-
-    if (uploadError) throw new Error(`Görsel yüklenemedi: ${uploadError.message}`)
-
-    // Public URL al
-    const { data: urlData } = supabase.storage
-      .from("question-images")
-      .getPublicUrl(uploadData.path)
-
-    // Auth user al
-    const { data: { user } } = await supabase.auth.getUser()
-
-    // Soruyu kaydet
-    const { data: questionData, error: questionError } = await supabase
-      .from("questions")
-      .insert({
-        user_id: user?.id,
-        course_id: selectedCourse.id,
-        image_url: urlData.publicUrl,
-        status: status,
-        note: total === 1 ? (note.trim() || null) : null,
-        is_favorite: false,
-      })
-      .select()
-      .single()
-
-    if (questionError) throw new Error(`Soru kaydedilemedi: ${questionError.message}`)
-
-    // Etiketleri kaydet
-    for (const tagName of tags) {
-      let tagId: string
-
-      const { data: existingTag } = await supabase
-        .from("tags")
-        .select("id")
-        .eq("user_id", profile.id)
-        .eq("course_id", selectedCourse.id)
-        .ilike("name", tagName)
-        .single()
-
-      if (existingTag) {
-        tagId = existingTag.id
-      } else {
-        const { data: newTag } = await supabase
-          .from("tags")
-          .insert({ user_id: profile.id, course_id: selectedCourse.id, name: tagName })
-          .select()
-          .single()
-
-        if (!newTag) continue
-        tagId = newTag.id
-      }
-
-      await supabase
-        .from("question_tags")
-        .insert({ question_id: questionData.id, tag_id: tagId })
-    }
-
-    return questionData
-  }
-
   const handleSave = async () => {
     if (images.length === 0) { Alert.alert("Hata", "En az 1 fotoğraf ekle"); return }
     if (!selectedCourse) { Alert.alert("Hata", "Ders seç"); return }
     if (!status) { Alert.alert("Hata", "Soru durumu seç"); return }
     if (!profile) return
+
+    // Günlük limit kontrolü
+    if (dailyCount + images.length > DAILY_LIMIT) {
+      const remaining = DAILY_LIMIT - dailyCount
+      Alert.alert(
+        "Günlük Limit",
+        remaining <= 0
+          ? "Bugünkü yükleme limitine ulaştın (30/30). Yarın tekrar dene!"
+          : `Bugün en fazla ${remaining} soru daha yükleyebilirsin.`
+      )
+      return
+    }
 
     // Hâlâ yüklenen var mı kontrol et
     const stillUploading = images.some((img) => img.status === "uploading")
@@ -317,20 +268,26 @@ export default function UploadScreen() {
         setUploadProgress(`${i + 1}/${images.length} kaydediliyor...`)
 
         // Soruyu kaydet
+        const insertData: any = {
+          user_id: user?.id,
+          course_id: selectedCourse.id,
+          image_url: img.publicUrl,
+          status: status,
+          note: images.length === 1 ? (note.trim() || null) : null,
+          is_favorite: false,
+        }
+
         const { data: questionData, error: questionError } = await supabase
           .from("questions")
-          .insert({
-            user_id: user?.id,
-            course_id: selectedCourse.id,
-            image_url: img.publicUrl,
-            status: status,
-            note: images.length === 1 ? (note.trim() || null) : null,
-            is_favorite: false,
-          })
+          .insert(insertData)
           .select()
           .single()
 
-        if (questionError) continue
+        if (questionError) {
+          console.log("Insert error:", questionError.message)
+          Alert.alert("Kayıt Hatası", questionError.message)
+          break
+        }
 
         // Etiketleri kaydet
         for (const tagName of tags) {
@@ -376,6 +333,7 @@ export default function UploadScreen() {
           setTags([])
           setTagInput("")
           triggerRefresh()
+          loadDailyCount()
         },
       }])
     } catch (err: any) {
@@ -390,11 +348,24 @@ export default function UploadScreen() {
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: COLORS.navy }}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Soru Yükle</Text>
-        {images.length > 0 && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{images.length} fotoğraf</Text>
+        <View style={styles.headerRight}>
+          {images.length > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{images.length} fotoğraf</Text>
+            </View>
+          )}
+          <View style={[
+            styles.quotaBadge,
+            { backgroundColor: (DAILY_LIMIT - dailyCount) < 5 ? COLORS.red + "30" : "#2A355C" }
+          ]}>
+            <Text style={[
+              styles.quotaBadgeText,
+              { color: (DAILY_LIMIT - dailyCount) < 5 ? COLORS.red : COLORS.gray300 }
+            ]}>
+              {Math.max(0, DAILY_LIMIT - dailyCount)}/{DAILY_LIMIT}
+            </Text>
           </View>
-        )}
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -429,11 +400,7 @@ export default function UploadScreen() {
                       <Text style={styles.imageOverlayText}>⏳</Text>
                     </View>
                   )}
-                  {img.status === "done" && (
-                    <View style={styles.imageIndexBadge}>
-                      <Text style={styles.imageIndexText}>✓</Text>
-                    </View>
-                  )}
+                  {/* Yanlış/boş sorularda kaydet butonuna basınca otomatik taranır */}
                   {img.status === "error" && (
                     <View style={[styles.imageOverlay, { backgroundColor: "rgba(239,68,68,0.6)" }]}>
                       <Text style={styles.imageOverlayText}>✕</Text>
@@ -449,6 +416,8 @@ export default function UploadScreen() {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Yanlış/boş sorular kaydetme sırasında otomatik AI taranır */}
 
           {/* Ders Seçimi */}
           <Text style={styles.label}>Ders Seçimi</Text>
@@ -588,6 +557,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: { color: COLORS.white, fontSize: FONT_SIZES.xl, fontWeight: FONT_WEIGHTS.bold },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: SPACING.sm },
   countBadge: {
     backgroundColor: COLORS.accent,
     paddingHorizontal: 12,
@@ -595,6 +565,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
   },
   countBadgeText: { color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.bold },
+  quotaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full },
+  quotaBadgeText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.bold },
   content: { flex: 1, backgroundColor: COLORS.background },
   contentInner: { padding: SPACING.md, paddingBottom: 120 },
 
